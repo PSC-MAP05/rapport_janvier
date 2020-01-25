@@ -1,0 +1,173 @@
+
+from keras.layers import Dense
+import matplotlib.pyplot as plt
+import random as rd
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import keras
+from keras.optimizers import Adam
+from sklearn.model_selection import train_test_split
+import numpy.random as rd
+
+
+def to_matrice(dataset):
+    # marche pour un dataset avec notes entre 0 et note max
+    # à adapter sinon
+
+    user = dataset.iloc[:, 0]
+    item = dataset.iloc[:, 1]
+
+    utile = dataset.iloc[:, 0:3]
+    data_array = utile.get_values()  # to_numpy devient get_values sur python 3
+
+    user_dict = {}
+    for k in range(data_array.shape[0]):
+        user_dict[data_array[k][0]] = data_array[k][1]
+    nb_user = len(user_dict)
+
+    item_dict = {}
+    for k in range(data_array.shape[0]):
+        item_dict[data_array[k][1]] = data_array[k][0]
+    nb_item = len(item_dict)
+
+    nb_ratings = data_array.shape[0]
+    pourc = round(100 * nb_ratings / (nb_user * nb_item), 2)
+
+    print("Il y a ", nb_user, " utilisateurs et ", nb_item, "plats et ", nb_ratings, "notes, soit une matrice ", pourc,
+          "% pleine.")
+
+    # Matrice note
+
+    # on commence par remplir une matrice avec que des zeros ou des -1, à voir
+    M = np.zeros((nb_user, nb_ratings))
+
+    # Il faut maintenant réindexer
+    # Stratégie :
+
+    index = 0
+    for cle in user_dict.keys():
+        user_dict[cle] = index
+        index += 1
+
+    index = 0
+    for cle in item_dict.keys():
+        item_dict[cle] = index
+        index += 1
+
+    for x in data_array:
+        user = user_dict.get(x[0])
+        item = item_dict.get(x[1])
+        rating = x[2]
+        M[user][item] = rating + 1  # je fais donc des notes de 1 à 3 et on laisse 0 pour les non notés
+
+    return M
+
+def to_dataset(M):
+    utile = []
+    lignes=len(M)
+    colonnes=len(M[1])
+    for i in range(lignes):
+        for j in range(colonnes):
+                if M[i][j]==0:
+                    continue
+                utile.append([i, j, M[i][j]])
+    utile=np.array(utile)
+
+    dataset=pd.DataFrame(utile, columns=['user_id', 'item_id', 'rating'])
+    return dataset
+
+
+dataset = pd.read_csv('dataset_restaurant.csv')
+dataset=to_dataset(to_matrice(dataset))
+train, test = train_test_split(dataset, test_size=0.2)
+n_users = len(dataset.user_id.unique())
+n_books = len(dataset.item_id.unique())
+
+from keras.layers import Input, Embedding, Flatten, Dot, Dense
+from keras.models import Model
+
+
+
+#####################################################
+#################     CODE 1       ##################
+#####################################################
+book_input = Input(shape=[1], name="Book-Input")
+book_embedding = Embedding(n_books+1, 5, name="Book-Embedding")(book_input)
+book_vec = Flatten(name="Flatten-Books")(book_embedding)
+
+user_input = Input(shape=[1], name="User-Input")
+user_embedding = Embedding(n_users+1, 5, name="User-Embedding")(user_input)
+user_vec = Flatten(name="Flatten-Users")(user_embedding)
+
+prod = Dot(name="Dot-Product", axes=1)([book_vec, user_vec])
+model = Model([user_input, book_input], prod)
+model.compile('adam', 'mean_squared_error')
+
+history = model.fit([train.user_id, train.item_id], train.rating, validation_split=.15,epochs=1000, verbose=1)
+
+print(history.history.keys())
+
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'test'], loc='upper left')
+plt.show()
+
+#####################################################
+#################     CODE 2       ##################
+#####################################################
+
+
+dataset = pd.read_csv('dataset_restaurant.csv')
+#dataset=to_dataset(to_matrice(dataset))
+train, test = train_test_split(dataset, test_size=0.2)
+n_users = len(dataset.userID.unique())
+n_books = len(dataset.placeID.unique())
+
+from keras.layers import Input, Embedding, Flatten, Dot, Dense
+from keras.models import Model
+
+dataset.userID = dataset.userID.astype('category').cat.codes.values
+dataset.placeID = dataset.placeID.astype('category').cat.codes.values
+
+from sklearn.model_selection import train_test_split
+train, test = train_test_split(dataset, test_size=0.20)
+
+n_users, n_plats = len(dataset.userID.unique()), len(dataset.placeID.unique())
+
+n_latent_factors_user =10
+n_latent_factors_plat = n_latent_factors_user
+
+
+plat_input = keras.layers.Input(shape=[1],name='Item')
+plat_embedding = keras.layers.Embedding(n_plats + 1, n_latent_factors_plat, name='Plat-Embedding')(plat_input)
+plat_vec = keras.layers.Flatten(name='FlattenPlats')(plat_embedding)
+
+user_input = keras.layers.Input(shape=[1],name='User')
+user_embedding = keras.layers.Embedding(n_users + 1, n_latent_factors_user,name='User-Embedding')(user_input)
+user_vec = keras.layers.Flatten(name='FlattenUsers')(user_embedding)
+
+concat = keras.layers.dot([plat_vec, user_vec], axes=1, normalize=False)
+
+result = keras.layers.Dense(1, activation='relu',name='Activation')(concat)
+
+adam = Adam(lr=0.01)
+
+model = keras.Model([user_input, plat_input], result)
+model.compile(optimizer=adam, loss= 'mean_squared_error')
+
+history = model.fit([train.userID, train.placeID], train.rating, epochs=50, validation_split=0.20, verbose=1)
+
+
+
+
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('Perte quadratique moyenne')
+plt.ylabel('Perte')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Test'], loc='upper left')
+plt.show()
