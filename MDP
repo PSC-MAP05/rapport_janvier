@@ -1,0 +1,91 @@
+# produit Client supposé défini
+# Segementation supposée effectuée
+import numpy as np
+import scipy.stats as stats
+import math
+Nb_States = 24
+Stock_beg = 100
+def Demand(time, price):
+    return Stock_beg*math.exp(-price)*math.exp(-(time-12)**2/24)
+
+
+# alet Demand centrée en demand plus haut
+
+def Prob(i,j, prix, k,l):
+    var_demande = 1
+    if (k != i + 1 or j< l):
+        return 0
+    if j == 0:
+        return 0
+    demande = Demand(i, prix)
+    proba = stats.norm.cdf(l+1,demande, var_demande) - stats.norm.cdf(l,demande, var_demande)
+    return proba
+    # coder une densité ayant son maximum en Demand
+    # retourner la probabilité
+
+
+def reward(i,j,prix,k,l):
+    return prix*(j-l) -1
+
+
+def Esp(i,j, tab_V, prix, dic_prob, dic_rew):
+
+    P = dic_prob[(i,j,prix,i+1)]
+    V_r = 0.8*tab_V[i + 1] + dic_rew[(i,j, prix, i+1)]
+    return np.dot(P, V_r)
+
+
+def ChooseAction(i,j, tab_V, liste_Prix, dic_prob, dic_rew):
+    maximum = -np.inf
+    argmax = 0
+    for price in liste_Prix:
+        esp = Esp(i,j,tab_V,price, dic_prob, dic_rew)
+        if esp>maximum:
+            maximum = esp
+            argmax = price
+    return maximum,argmax
+
+def update_MDP(tab_V, liste_Prix, dic_prob, dic_rew):
+    tab_int = np.zeros((Nb_States,Stock_beg))
+    Vmax, prix = ChooseAction(0,Stock_beg-1,tab_V,liste_Prix ,dic_prob, dic_rew)
+    tab_int[0][Stock_beg-1] = Vmax
+    for i in range(1,Nb_States-1):
+        for j in range(Stock_beg):
+            Vmax, prix = ChooseAction(i,j,tab_V, liste_Prix, dic_prob, dic_rew)
+            tab_int[i][j] = Vmax
+    return tab_int
+
+
+
+def main():
+
+    pmax = 20
+    pmin = 10
+    liste_Prix = []
+    # Creation action par pas de k
+    k = 10
+    pas = (pmax - pmin) / (k - 1)
+    for i in range(k):
+        liste_Prix = np.append(liste_Prix, (pmin + i * pas))
+    # creation etats de 20h à 23h50 par pas de 10
+
+    tab_V = np.random.rand(Nb_States, Stock_beg)*0.10
+    dic_rew = {}
+    for i in range(Nb_States - 1):
+        for j in range(Stock_beg):
+            for price in liste_Prix:
+                dic_rew[(i, j, price, i + 1)] = np.array([reward(i, j, price, i + 1, m) for m in range(Stock_beg)])
+    dic_prob = {}
+    for i in range(Nb_States-1):
+        for j in range(Stock_beg):
+            for price in liste_Prix:
+
+                dic_prob[(i,j,price,i+1)] = np.array([Prob(i, j, price, i + 1, m) for m in range(Stock_beg)])
+    NB_ITE = 10
+    for i in range(NB_ITE):
+        tab_V = update_MDP(tab_V, liste_Prix, dic_prob, dic_rew)
+        print(i)
+    print(tab_V)
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
